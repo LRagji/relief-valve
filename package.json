@@ -6,9 +6,9 @@
   "scripts": {
     "clean-build": "run-script-os",
     "copy-files": "run-script-os",
-    "copy-files:linux": "cp ./README.md ./package.json ./package-lock.json ./license.md ./source/write.lua ./dist/",
-    "copy-files:macos": "cp ./README.md ./package.json ./package-lock.json ./license.md ./source/write.lua ./dist/",
-    "copy-files:windows": "for %I in (.\\README.md .\\package.json .\\package-lock.json .\\license.md .\\source\\write.lua) do copy %I .\\dist\\",
+    "copy-files:linux": "cp ./README.md ./package.json ./package-lock.json ./license.md ./source/write_count_purge.lua ./dist/",
+    "copy-files:macos": "cp ./README.md ./package.json ./package-lock.json ./license.md ./source/write_count_purge.lua ./dist/",
+    "copy-files:windows": "for %I in (.\\README.md .\\package.json .\\package-lock.json .\\license.md .\\source\\write_count_purge.lua) do copy %I .\\dist\\",
     "clean-build:macos": "rm -rf ./dist/",
     "clean-build:linux": "rm -rf ./dist/",
     "clean-build:windows": "rmdir /s /q .\\dist\\",

@@ -17,7 +17,8 @@ local returnArray = {}
 local tempTime = redis.call("TIME")
 local currentTimestampInSeconds = tonumber(tempTime[1])
 
-redis.call("XADD", accKey, dataId, unpack(data))
+local publishMessageId = redis.call("XADD", accKey, dataId, unpack(data))
+table.insert(returnArray, publishMessageId)
 redis.call("ZADD", indexKey, currentTimestampInSeconds, accKey)
 local currentAccLen = redis.call("XLEN", accKey)
 if (currentAccLen >= countThreshold) then
