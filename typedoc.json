@@ -1,0 +1,15 @@
+{
+    "entryPoints": [
+        "source/index.ts"
+    ],
+    "readme": "README.md",
+    "out": "docs",
+    "excludeExternals": true,
+    "excludePrivate": true,
+    "excludeNotDocumented": false,
+    "entryPointStrategy": "Resolve",
+    "tsconfig": "./tsconfig.json",
+    "exclude": [
+        "./test/*.ts"
+    ]
+}
