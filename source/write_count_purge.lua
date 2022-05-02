@@ -1,5 +1,5 @@
 -- To test:
--- redis-cli --eval ./write_count_purge.lue index acc accPurged purge , 10 "*" K1 V1 K2 V2 K3 V3
+-- redis-cli --eval ./write_count_purge.lua index acc accPurged purge , 10 "*" K1 V1 K2 V2 K3 V3
 -- Flowchart: flowcharts/write.drawio
 -- Return Codes: Array of strings
 -- [0] = Purged == 1 else 0
