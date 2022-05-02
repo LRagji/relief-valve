@@ -6,9 +6,9 @@
   "scripts": {
     "clean-build": "run-script-os",
     "copy-files": "run-script-os",
-    "copy-files:linux": "cp ./README.md ./package.json ./package-lock.json ./license.md ./source/write_count_purge.lua ./dist/",
-    "copy-files:macos": "cp ./README.md ./package.json ./package-lock.json ./license.md ./source/write_count_purge.lua ./dist/",
-    "copy-files:windows": "for %I in (.\\README.md .\\package.json .\\package-lock.json .\\license.md .\\source\\write_count_purge.lua) do copy %I .\\dist\\",
+    "copy-files:linux": "cp ./README.md ./package.json ./package-lock.json ./license.md ./source/write_count_purge.lua ./source/time_purge.lua ./dist/",
+    "copy-files:macos": "cp ./README.md ./package.json ./package-lock.json ./license.md ./source/write_count_purge.lua ./source/time_purge.lua ./dist/",
+    "copy-files:windows": "for %I in (.\\README.md .\\package.json .\\package-lock.json .\\license.md .\\source\\write_count_purge.lua .\\source\\time_purge.lua) do copy %I .\\dist\\",
     "clean-build:macos": "rm -rf ./dist/",
     "clean-build:linux": "rm -rf ./dist/",
     "clean-build:windows": "rmdir /s /q .\\dist\\",
@@ -17,7 +17,7 @@
     "build": "(npm run clean-build || node -v) && tsc && npm run copy-files && npm run docs",
     "redisstop": "docker stop TestCentralStore && ping 127.0.0.1 -c 3",
     "redisstart": "(npm run redisstop || docker -v ) && docker run --name TestCentralStore -v ${PWD}:\"/var/lib/luatest\" -p 6379:6379 -itd --rm redis:latest",
-    "redisView": "docker run -v redisinsight:/db -p 8001:8001 redislabs/redisinsight:latest",
+    "redisView": "docker run -v redisinsight:/db -p 8001:8001 redislabs/redisinsight:latest --itd --rm",
     "push": "npm whoami && npm test && npm version patch && cd ./dist && npm publish && cd .. & git push --tags",
     "docs": "typedoc"
   },
@@ -40,6 +40,9 @@
     "Laukik"
   ],
   "devDependencies": {
+    "@types/mocha": "^9.1.1",
+    "cross-env": "^7.0.3",
+    "ioredis": "^5.0.4",
     "mocha": "^9.2.2",
     "nyc": "^15.1.0",
     "run-script-os": "^1.1.6",

@@ -32,7 +32,18 @@ export class ReliefValve {
         private indexKey = name + "Idx",
         private accumalatorKey = (data: object) => Promise.resolve(name + "Acc"),
         private accumalatorPurgedKey = (accumalatorKey: string) => Promise.resolve(accumalatorKey + Date.now().toString())) {
-
+        if (this.timeThresholdInSeconds < 0) {
+            this.timeThresholdInSeconds *= -1;
+        }
+        if (this.countThreshold < 0) {
+            this.countThreshold *= -1;
+        }
+        if (this.timeThresholdInSeconds = 0) {
+            this.timeThresholdInSeconds = 1;
+        }
+        if (this.countThreshold = 0) {
+            this.countThreshold = 1;
+        }
     }
 
     public async publish(data: object, id = "*"): Promise<string> {
