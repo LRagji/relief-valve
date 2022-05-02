@@ -1,3 +1,4 @@
+import path from "path";
 
 export interface IRedisClient {
     acquire(token?: string): Promise<void>
@@ -19,8 +20,8 @@ export interface IBatchIdentity {
 
 export class ReliefValve {
 
-    private writeScript = "write_count_purge.lua";
-    private timePurgeScript = "time_purge.lua";
+    private writeScript = path.join(__dirname, "write_count_purge.lua");
+    private timePurgeScript = path.join(__dirname, "time_purge.lua");
     private groupsCreated = new Set();
 
     constructor(private client: IRedisClient,
@@ -38,10 +39,10 @@ export class ReliefValve {
         if (this.countThreshold < 0) {
             this.countThreshold *= -1;
         }
-        if (this.timeThresholdInSeconds = 0) {
+        if (this.timeThresholdInSeconds === 0) {
             this.timeThresholdInSeconds = 1;
         }
-        if (this.countThreshold = 0) {
+        if (this.countThreshold === 0) {
             this.countThreshold = 1;
         }
     }
@@ -55,7 +56,8 @@ export class ReliefValve {
             throw new Error("Name, IndexKey, AccumalatorKey and AccumalatorPurgedKey cannot be same.")
         }
         const values = Array.from(Object.entries(data)).flat();
-        values.unshift([this.countThreshold, id]);
+        values.unshift(id);
+        values.unshift(this.countThreshold);
         await this.client.acquire(token);
         try {
             const response = await this.client.script(this.writeScript, keys, values);
@@ -108,43 +110,44 @@ export class ReliefValve {
             else {
                 //We need to pluck fresh ones.
                 const freshResponse = await this.client.run(["XREADGROUP", "GROUP", this.groupName, this.clientName, "COUNT", "1", "STREAMS", this.name, ">"]);
+                console.log(JSON.stringify(freshResponse));
                 if (Array.isArray(freshResponse) && freshResponse.length >= 1 && Array.isArray(freshResponse[0]) && freshResponse[0].length >= 2 && freshResponse[1].length > 0) {
                     itemToProcess = freshResponse[1];
                 }
             }
 
-            if (itemToProcess != undefined) {
-                returnValue = {
-                    "id": itemToProcess[0],
-                    "name": itemToProcess[1][1],
-                    "retrivalCount": -1,
-                    "payload": new Map<string, Object>()
-                };
-                const retrivalCountResponse = await this.client.run(["XPENDING", this.name, this.groupName, returnValue.id, returnValue.id, "1"]);
-                if (Array.isArray(retrivalCountResponse) && retrivalCountResponse.length >= 1) {
-                    returnValue.retrivalCount = parseInt(retrivalCountResponse[0][3]);
-                }
-                const serializedPayload = await this.client.run(["XREAD", "COUNT", "1", "STREAMS", returnValue.name, "0-0"]);
-                if (Array.isArray(serializedPayload) && serializedPayload.length >= 1 && Array.isArray(serializedPayload[1])) {
-                    const entries = serializedPayload[1];
-                    returnValue.payload = entries.reduce((acc: Map<string, Object>, entry: any[]) => {
-                        const key = entry[0];
-                        const serializedObject = entry[1];
-                        const pairs = serializedObject.reduce((acc: string[][], e: string, idx: number) => {
-                            if (idx % 2 === 0) {
-                                const kvp = acc.pop() as string[];
-                                kvp.push(e);
-                                acc.push(kvp);
-                            } else {
-                                acc.push([e]);
-                            }
-                            return acc;
-                        }, []);
-                        acc.set(key, Object.fromEntries(pairs));
-                        return acc;
-                    }, returnValue.payload);
-                }
-            }
+            // if (itemToProcess != undefined) {
+            //     returnValue = {
+            //         "id": itemToProcess[0],
+            //         "name": itemToProcess[1][1],
+            //         "retrivalCount": -1,
+            //         "payload": new Map<string, Object>()
+            //     };
+            //     const retrivalCountResponse = await this.client.run(["XPENDING", this.name, this.groupName, returnValue.id, returnValue.id, "1"]);
+            //     if (Array.isArray(retrivalCountResponse) && retrivalCountResponse.length >= 1) {
+            //         returnValue.retrivalCount = parseInt(retrivalCountResponse[0][3]);
+            //     }
+            //     const serializedPayload = await this.client.run(["XREAD", "COUNT", "1", "STREAMS", returnValue.name, "0-0"]);
+            //     if (Array.isArray(serializedPayload) && serializedPayload.length >= 1 && Array.isArray(serializedPayload[1])) {
+            //         const entries = serializedPayload[1];
+            //         returnValue.payload = entries.reduce((acc: Map<string, Object>, entry: any[]) => {
+            //             const key = entry[0];
+            //             const serializedObject = entry[1];
+            //             const pairs = serializedObject.reduce((acc: string[][], e: string, idx: number) => {
+            //                 if (idx % 2 === 0) {
+            //                     const kvp = acc.pop() as string[];
+            //                     kvp.push(e);
+            //                     acc.push(kvp);
+            //                 } else {
+            //                     acc.push([e]);
+            //                 }
+            //                 return acc;
+            //             }, []);
+            //             acc.set(key, Object.fromEntries(pairs));
+            //             return acc;
+            //         }, returnValue.payload);
+            //     }
+            // }
             return returnValue;
         }
         finally {
