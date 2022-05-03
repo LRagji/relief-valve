@@ -10,7 +10,7 @@ export interface IRedisClient {
 }
 
 export interface IBatch extends IBatchIdentity {
-    retrivalCount: number, //Number of times the message have been retrived
+    readsInCurrentGroup: number, //Number of times the message have been retrived
     payload: Map<string, object>
 }
 export interface IBatchIdentity {
@@ -56,6 +56,10 @@ export class ReliefValve {
             throw new Error("Name, IndexKey, AccumalatorKey and AccumalatorPurgedKey cannot be same.")
         }
         const values = Array.from(Object.entries(data)).flat();
+        const allStrings = values.reduce((acc, e) => acc && typeof (e) === "string", true);
+        if (allStrings === false) {
+            throw new Error("Publish only support objects having strings as their values.");
+        }
         values.unshift(id);
         values.unshift(this.countThreshold);
         await this.client.acquire(token);
@@ -105,7 +109,7 @@ export class ReliefValve {
             let itemToProcess: string[] | undefined = undefined;
             if (Array.isArray(staleResponse) && staleResponse.length >= 2 && Array.isArray(staleResponse[1]) && staleResponse[1].length > 0) {
                 //We have a stale response
-                itemToProcess = staleResponse[1];
+                itemToProcess = staleResponse[1][0];
             }
             else {
                 //We need to pluck fresh ones.
@@ -119,12 +123,12 @@ export class ReliefValve {
                 returnValue = {
                     "id": itemToProcess[0],
                     "name": itemToProcess[1][1],
-                    "retrivalCount": -1,
+                    "readsInCurrentGroup": -1,
                     "payload": new Map<string, Object>()
                 };
                 const retrivalCountResponse = await this.client.run(["XPENDING", this.name, this.groupName, returnValue.id, returnValue.id, "1"]);
                 if (Array.isArray(retrivalCountResponse) && retrivalCountResponse.length >= 1) {
-                    returnValue.retrivalCount = parseInt(retrivalCountResponse[0][3]);
+                    returnValue.readsInCurrentGroup = parseInt(retrivalCountResponse[0][3]);
                 }
                 const serializedPayload = await this.client.run(["XREAD", "COUNT", "1", "STREAMS", returnValue.name, "0-0"]);
                 if (Array.isArray(serializedPayload) && serializedPayload.length >= 1 && Array.isArray(serializedPayload[0])) {
@@ -145,7 +149,7 @@ export class ReliefValve {
         }
     }
 
-    public async acknowledge(batch: IBatchIdentity, dropBatch: true): Promise<boolean> {
+    public async acknowledge(batch: IBatchIdentity, dropBatch = true): Promise<boolean> {
         const token = `acknowledge-${Date.now().toString()}`;
         await this.client.acquire(token);
         try {
@@ -154,7 +158,7 @@ export class ReliefValve {
             if (response === 1) {
                 if (dropBatch === true) {
                     await this.client.run(["DEL", batch.name]);
-                    await this.client.run(["XDEL", batch.id]);
+                    await this.client.run(["XDEL", this.name, batch.id]);
                 }
                 return true;
             }
