@@ -32,7 +32,7 @@ export class ReliefValve {
         private clientName: string,
         private indexKey = name + "Idx",
         private accumalatorKey = (data: object) => Promise.resolve(name + "Acc"),
-        private accumalatorPurgedKey = (accumalatorKey: string) => Promise.resolve(accumalatorKey + Date.now().toString())) {
+        private accumalatorPurgedKey = (accumalatorKey: string) => Promise.resolve(accumalatorKey + "Purged")) {
         if (this.timeThresholdInSeconds < 0) {
             this.timeThresholdInSeconds *= -1;
         }
@@ -50,7 +50,7 @@ export class ReliefValve {
     public async publish(data: object, id = "*"): Promise<string> {
         const token = `publish-${Date.now().toString()}`;
         const accKey = await this.accumalatorKey(data);
-        const accKeyRenamed = await this.accumalatorPurgedKey(accKey);
+        const accKeyRenamed = await this.constructAccumalatorPurgeKey(accKey, this.groupName, this.clientName);;
         const keys = [this.indexKey, accKey, accKeyRenamed, this.name];
         if (keys.length != Array.from((new Set(keys)).values()).length) {
             throw new Error("Name, IndexKey, AccumalatorKey and AccumalatorPurgedKey cannot be same.")
@@ -80,7 +80,7 @@ export class ReliefValve {
                 const accKey: string = accumulatorKeysWithScore[counter];
                 const accKeyScore: string = accumulatorKeysWithScore[counter + 1];
                 asyncHandles.push((async () => {
-                    const accKeyRenamed = await this.accumalatorPurgedKey(accKey);
+                    const accKeyRenamed = await this.constructAccumalatorPurgeKey(accKey, this.groupName, this.clientName);
                     const keys = [this.indexKey, accKey, accKeyRenamed, this.name];
                     if (keys.length != Array.from((new Set(keys)).values()).length) {
                         throw new Error("Name, IndexKey, AccumalatorKey and AccumalatorPurgedKey cannot be same.")
@@ -110,44 +110,34 @@ export class ReliefValve {
             else {
                 //We need to pluck fresh ones.
                 const freshResponse = await this.client.run(["XREADGROUP", "GROUP", this.groupName, this.clientName, "COUNT", "1", "STREAMS", this.name, ">"]);
-                console.log(JSON.stringify(freshResponse));
-                if (Array.isArray(freshResponse) && freshResponse.length >= 1 && Array.isArray(freshResponse[0]) && freshResponse[0].length >= 2 && freshResponse[1].length > 0) {
-                    itemToProcess = freshResponse[1];
+                if (Array.isArray(freshResponse) && freshResponse.length >= 1 && Array.isArray(freshResponse[0]) && freshResponse[0].length >= 2 && freshResponse[0][1].length > 0) {
+                    itemToProcess = freshResponse[0][1][0];
                 }
             }
 
-            // if (itemToProcess != undefined) {
-            //     returnValue = {
-            //         "id": itemToProcess[0],
-            //         "name": itemToProcess[1][1],
-            //         "retrivalCount": -1,
-            //         "payload": new Map<string, Object>()
-            //     };
-            //     const retrivalCountResponse = await this.client.run(["XPENDING", this.name, this.groupName, returnValue.id, returnValue.id, "1"]);
-            //     if (Array.isArray(retrivalCountResponse) && retrivalCountResponse.length >= 1) {
-            //         returnValue.retrivalCount = parseInt(retrivalCountResponse[0][3]);
-            //     }
-            //     const serializedPayload = await this.client.run(["XREAD", "COUNT", "1", "STREAMS", returnValue.name, "0-0"]);
-            //     if (Array.isArray(serializedPayload) && serializedPayload.length >= 1 && Array.isArray(serializedPayload[1])) {
-            //         const entries = serializedPayload[1];
-            //         returnValue.payload = entries.reduce((acc: Map<string, Object>, entry: any[]) => {
-            //             const key = entry[0];
-            //             const serializedObject = entry[1];
-            //             const pairs = serializedObject.reduce((acc: string[][], e: string, idx: number) => {
-            //                 if (idx % 2 === 0) {
-            //                     const kvp = acc.pop() as string[];
-            //                     kvp.push(e);
-            //                     acc.push(kvp);
-            //                 } else {
-            //                     acc.push([e]);
-            //                 }
-            //                 return acc;
-            //             }, []);
-            //             acc.set(key, Object.fromEntries(pairs));
-            //             return acc;
-            //         }, returnValue.payload);
-            //     }
-            // }
+            if (itemToProcess != undefined) {
+                returnValue = {
+                    "id": itemToProcess[0],
+                    "name": itemToProcess[1][1],
+                    "retrivalCount": -1,
+                    "payload": new Map<string, Object>()
+                };
+                const retrivalCountResponse = await this.client.run(["XPENDING", this.name, this.groupName, returnValue.id, returnValue.id, "1"]);
+                if (Array.isArray(retrivalCountResponse) && retrivalCountResponse.length >= 1) {
+                    returnValue.retrivalCount = parseInt(retrivalCountResponse[0][3]);
+                }
+                const serializedPayload = await this.client.run(["XREAD", "COUNT", "1", "STREAMS", returnValue.name, "0-0"]);
+                if (Array.isArray(serializedPayload) && serializedPayload.length >= 1 && Array.isArray(serializedPayload[0])) {
+                    const entries = serializedPayload[0][1];
+                    returnValue.payload = entries.reduce((acc: Map<string, Object>, entry: any[]) => {
+                        const key = entry[0];
+                        const serializedObject = entry[1];
+                        const pairs = serializedObject.reduce(this.convertFlatKeyValuesToEntries, []);
+                        acc.set(key, Object.fromEntries(pairs));
+                        return acc;
+                    }, returnValue.payload);
+                }
+            }
             return returnValue;
         }
         finally {
@@ -181,7 +171,32 @@ export class ReliefValve {
         if (cache.has(groupName)) {
             return;
         }
-        await acquiredClient.run(["XGROUP", "CREATE", streamName, groupName, "0", "MKSTREAM"]);
-        cache.add(groupName);
+        try {
+            await acquiredClient.run(["XGROUP", "CREATE", streamName, groupName, "0", "MKSTREAM"]);
+            cache.add(groupName);
+        }
+        catch (err: any) {
+            if (err.message === 'BUSYGROUP Consumer Group name already exists') {
+                cache.add(groupName);
+            }
+            else {
+                throw err;
+            }
+        }
+    }
+
+    private async constructAccumalatorPurgeKey(accKey: string, groupName: string, clientName: string) {
+        return `${await this.accumalatorPurgedKey(accKey)}-${groupName}-${clientName}-${Date.now().toString()}`;
+    }
+
+    private convertFlatKeyValuesToEntries(acc: string[][], e: string, idx: number): string[][] {
+        if (idx % 2 === 1) {
+            const kvp = acc.pop() as string[];
+            kvp.push(e);
+            acc.push(kvp);
+        } else {
+            acc.push([e]);
+        }
+        return acc;
     }
 } 
