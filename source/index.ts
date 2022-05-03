@@ -1,5 +1,7 @@
 import path from "path";
-
+/**
+* Interface used to abstract a redis client to the package
+*/
 export interface IRedisClient {
     acquire(token?: string): Promise<void>
     release(token?: string): Promise<void>
@@ -9,12 +11,23 @@ export interface IRedisClient {
     script(filename: string, keys: string[], args: string[]): Promise<any>
 }
 
+/**
+ * Abstraction representing collection of multiple message into a batch
+ */
 export interface IBatch extends IBatchIdentity {
-    readsInCurrentGroup: number, //Number of times the message have been retrived
+    /** Number of time the message was delivered to a certain consumer group. */
+    readsInCurrentGroup: number,
+    /** Represents accumalated messages the Key is the ID given at the time of publishing and the value is object*/
     payload: Map<string, object>
 }
+
+/**
+ * Provides identity to the batch accumalated
+ */
 export interface IBatchIdentity {
-    name: string, //Key of the accumulator in redis
+    /** Name of the accumulator stream inside redis. */
+    name: string,
+    /** Stream Id used to acknowledge the message. */
     id: string, //Id of the main stream
 }
 

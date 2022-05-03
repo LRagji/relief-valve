@@ -11,14 +11,14 @@ local purgeKey = KEYS[4]
 local score = ARGV[1]
 local returnArray = {}
 
-local actualScore = redis.call("ZSCORE",indexKey,accKey);
-if(actualScore==score) then  -- This check is done to make actual operations transactional and thread safe.
+local actualScore = redis.call("ZSCORE", indexKey, accKey);
+if (actualScore == score) then -- This check is done to make actual operations transactional and thread safe.
     redis.call("RENAME", accKey, accRenameKey)
     redis.call("ZREM", indexKey, accKey)
-    redis.call("XADD", purgeKey, "*","Key",accRenameKey)
-    table.insert(returnArray,1)
+    redis.call("XADD", purgeKey, "*", "Key", accRenameKey)
+    table.insert(returnArray, 1)
 else
-    table.insert(returnArray,0)
+    table.insert(returnArray, 0)
 end
 
 return returnArray;

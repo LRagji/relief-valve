@@ -13,7 +13,7 @@ This package is based on [redis stream](https://github.com/LRagji/redis-streams-
 ## Getting Started
 
 1. Install using `npm -i relief-valve`
-2. Require in your project. `const brokerType = require('relief-valve').ReliefValve;` or `import { IBatchIdentity, IRedisClient, ReliefValve } from 'relief-valve'`
+2. Require in your project. `const rvType = require('relief-valve').ReliefValve;` or `import { IBatchIdentity, IRedisClient, ReliefValve } from 'relief-valve'`
 3. Run redis on local docker if required. `docker run --name streamz -p 6379:6379 -itd --rm redis:latest`
 3. Instantiate with a redis client and name for the stream, group name, client name and thresholds. `const publisherInstance = new ReliefValve(client, name, 1, 1, "PubGroup", "Publisher1");`
 4. All done, Start using it!!.
@@ -70,7 +70,7 @@ assert.deepStrictEqual(length, 0);
 
 ## Built with
 
-1. Authors :heart for Open Source.
+1. Authors :heart: for Open Source.
 
 
 ## Contributions
@@ -94,4 +94,4 @@ This project is contrubution to public domain and completely free for use, view 
 
 ## API
 1. Typing info included with the package.
-2. Type doc
+2. Type doc[W.I.P]
