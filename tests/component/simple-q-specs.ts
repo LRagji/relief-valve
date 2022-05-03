@@ -7,6 +7,13 @@ const delay = (timeInMillis: number) => new Promise((acc, rej) => setTimeout(acc
 
 describe(`relief-valve component tests`, () => {
 
+    // Testing includes:
+    // Fan out topology
+    // Sharded topology
+    // Ack Strategy
+    // Idle Processing Timeout Strategy
+    // Excludes Batch Mode.
+
     beforeEach(async function () {
         client = new RedisClient(process.env.REDISCON as string);
         await client.run(["FLUSHALL"]);
@@ -124,4 +131,41 @@ describe(`relief-valve component tests`, () => {
         assert.strictEqual(consumer1SecondResult, undefined);
     });
 
+    it('should be able to work in fan-out mode with multiple consumers', async () => {
+        //Setup
+        const publisherInstance = new ReliefValve(client, name, 1, 1, "PubGroup", "Publisher1");
+        const payload = { "hello": "world1", "A": "1", "Z": "26", "B": "2" };
+        const generatedId = await publisherInstance.publish(payload);
+
+        const totalFanoutConsumers = 10;
+        for (let consumerCounter = 0; consumerCounter < totalFanoutConsumers; consumerCounter++) {
+            const uniqueName = `C-${consumerCounter}`;
+            const Consumer = new ReliefValve(client, name, 1, 1, uniqueName, uniqueName);
+
+            //Test
+            const consumer1Result = await Consumer.consumeFreshOrStale(3600);
+            const ackResult = await Consumer.acknowledge(consumer1Result as IBatchIdentity, (consumerCounter === totalFanoutConsumers - 1));//Need to keep this false else other consumers will not get the message
+
+            //Verify
+            assert.notStrictEqual(generatedId, undefined);
+            assert.notStrictEqual(generatedId, null);
+            assert.notStrictEqual(generatedId, "");
+            if (consumer1Result == undefined) throw new Error("Read failed no batch found");
+            assert.notStrictEqual(consumer1Result.id, undefined);
+            assert.notStrictEqual(consumer1Result.id, null);
+            assert.notStrictEqual(consumer1Result.id, "");
+            assert.notStrictEqual(consumer1Result.name, undefined);
+            assert.notStrictEqual(consumer1Result.name, null);
+            assert.notStrictEqual(consumer1Result.name, "");
+            assert.strictEqual(consumer1Result.readsInCurrentGroup, 1);
+            assert.strictEqual(consumer1Result.payload.has(generatedId), true);
+            assert.deepStrictEqual(consumer1Result.payload.get(generatedId), payload);
+            assert.deepStrictEqual(ackResult, true);
+        }
+        const keys = await client.run(["KEYS", "*"]);
+        const length = await client.run(["XLEN", name]);
+        assert.deepStrictEqual(keys, [name]);
+        assert.deepStrictEqual(length, 0);
+
+    });
 });
