@@ -130,10 +130,9 @@ export class ReliefValve {
                 if (Array.isArray(retrivalCountResponse) && retrivalCountResponse.length >= 1) {
                     returnValue.readsInCurrentGroup = parseInt(retrivalCountResponse[0][3]);
                 }
-                const serializedPayload = await this.client.run(["XREAD", "COUNT", "1", "STREAMS", returnValue.name, "0-0"]);
-                if (Array.isArray(serializedPayload) && serializedPayload.length >= 1 && Array.isArray(serializedPayload[0])) {
-                    const entries = serializedPayload[0][1];
-                    returnValue.payload = entries.reduce((acc: Map<string, Object>, entry: any[]) => {
+                const serializedPayload = await this.client.run(["XRANGE", returnValue.name, "-", "+"]);
+                if (Array.isArray(serializedPayload) && serializedPayload.length >= 1) {
+                    returnValue.payload = serializedPayload.reduce((acc: Map<string, Object>, entry: any[]) => {
                         const key = entry[0];
                         const serializedObject = entry[1];
                         const pairs = serializedObject.reduce(this.convertFlatKeyValuesToEntries, []);

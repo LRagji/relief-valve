@@ -11,3 +11,9 @@ This package can be used in following topologies
 3. Batching/Accumalator(by time and element count) sharded que with message acknowledge & lost message reprocess facility
 4. Batching/Accumalator(by time and element count) fan-out que with message acknowledge & lost message reprocess facility
 
+Usage Pattern:
+1. The package should be instantiated on publisher and subscriber side with identitcal parameters in constructor apart from groupName and clientName, else will lead to chaotic behaviour of pulling messages.
+2. Count threshold is always evlauted on writes/publish into stream.
+3. Time threshold needs external invocation as redis currently doesnot support cron jobs, either subscriber or publisher can invoke this validation.
+4. Highest accurary of time threshold is limited to one second, but depends heavily on external invocation frequency.    
+
