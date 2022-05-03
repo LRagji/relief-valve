@@ -18,7 +18,7 @@
     "redisstop": "docker stop TestCentralStore && ping 127.0.0.1 -c 3",
     "redisstart": "(npm run redisstop || docker -v ) && docker run --name TestCentralStore -v ${PWD}:\"/var/lib/luatest\" -p 6379:6379 -itd --rm redis:latest",
     "redisView": "docker run -v redisinsight:/db -p 8001:8001 -itd --rm redislabs/redisinsight:latest",
-    "push": "npm whoami && npm test && npm version patch && cd ./dist && npm publish && cd .. & git push --tags",
+    "push": "npm whoami && npm test && cd ./dist && npm publish && cd .. && git push --tags && npm version patch",
     "docs": "typedoc"
   },
   "repository": {
