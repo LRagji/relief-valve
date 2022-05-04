@@ -10,7 +10,9 @@ local purgeKey = KEYS[3]
 local countThreshold = tonumber(ARGV[1])
 local dataId = ARGV[2]
 local idPropName = ARGV[3]
+local maxlength = tonumber(ARGV[4])
 local data = ARGV
+table.remove(data, 1)
 table.remove(data, 1)
 table.remove(data, 1)
 table.remove(data, 1)
@@ -35,7 +37,11 @@ if (currentAccLen >= countThreshold) then
     end
     -- Insert
     if (#clonedData > 0) then
-        redis.call("XADD", purgeKey, "*", unpack(clonedData))
+        if (maxlength >= 1) then
+            redis.call("XADD", purgeKey, "MAXLEN", "~", maxlength, "*", unpack(clonedData))
+        else
+            redis.call("XADD", purgeKey, "*", unpack(clonedData))
+        end
     end
     redis.call("DEL", accKey)
     redis.call("ZREM", indexKey, accKey)

@@ -43,6 +43,7 @@ export class ReliefValve {
         private clientName: string,
         private indexKey = name + "Idx",
         private accumalatorKey = (data: object) => Promise.resolve(name + "Acc"),
+        private cappedStreamLength = -1,
         private systemIdPropName = "_id_") {
         if (this.timeThresholdInSeconds < 0) {
             this.timeThresholdInSeconds *= -1;
@@ -70,6 +71,7 @@ export class ReliefValve {
         if (allStrings === false) {
             throw new Error("Publish only support objects having strings as their values.");
         }
+        values.unshift(this.cappedStreamLength);
         values.unshift(this.systemIdPropName);
         values.unshift(id);
         values.unshift(this.countThreshold);
