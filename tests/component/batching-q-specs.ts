@@ -45,9 +45,6 @@ describe(`relief-valve component tests`, () => {
                 assert.notStrictEqual(consumer1Result.id, undefined);
                 assert.notStrictEqual(consumer1Result.id, null);
                 assert.notStrictEqual(consumer1Result.id, "");
-                assert.notStrictEqual(consumer1Result.name, undefined);
-                assert.notStrictEqual(consumer1Result.name, null);
-                assert.notStrictEqual(consumer1Result.name, "");
                 assert.strictEqual(consumer1Result.readsInCurrentGroup, 1);
                 assert.strictEqual(consumer1Result.payload.size, batchsize);
                 assert.deepStrictEqual(consumer1Result.payload, payloads);
@@ -98,9 +95,6 @@ describe(`relief-valve component tests`, () => {
                 assert.notStrictEqual(consumer1Result.id, undefined);
                 assert.notStrictEqual(consumer1Result.id, null);
                 assert.notStrictEqual(consumer1Result.id, "");
-                assert.notStrictEqual(consumer1Result.name, undefined);
-                assert.notStrictEqual(consumer1Result.name, null);
-                assert.notStrictEqual(consumer1Result.name, "");
                 assert.strictEqual(consumer1Result.readsInCurrentGroup, 1);
                 assert.strictEqual(consumer1Result.payload.size, 1);
                 assert.deepStrictEqual(consumer1Result.payload, payloads);

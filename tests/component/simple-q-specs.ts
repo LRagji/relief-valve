@@ -44,9 +44,6 @@ describe(`relief-valve component tests`, () => {
         assert.notStrictEqual(consumer1Result.id, undefined);
         assert.notStrictEqual(consumer1Result.id, null);
         assert.notStrictEqual(consumer1Result.id, "");
-        assert.notStrictEqual(consumer1Result.name, undefined);
-        assert.notStrictEqual(consumer1Result.name, null);
-        assert.notStrictEqual(consumer1Result.name, "");
         assert.strictEqual(consumer1Result.readsInCurrentGroup, 1);
         assert.strictEqual(consumer1Result.payload.has(generatedId), true);
         assert.deepStrictEqual(consumer1Result.payload.get(generatedId), payload);
@@ -79,21 +76,16 @@ describe(`relief-valve component tests`, () => {
         assert.notStrictEqual(consumer1Result.id, undefined);
         assert.notStrictEqual(consumer1Result.id, null);
         assert.notStrictEqual(consumer1Result.id, "");
-        assert.notStrictEqual(consumer1Result.name, undefined);
-        assert.notStrictEqual(consumer1Result.name, null);
-        assert.notStrictEqual(consumer1Result.name, "");
         assert.strictEqual(consumer1Result.readsInCurrentGroup, 1);
         assert.strictEqual(consumer1Result.payload.has(generatedId), true);
         assert.deepStrictEqual(consumer1Result.payload.get(generatedId), payload);
         assert.strictEqual(consumer2Result, undefined); //Since the first consumer in the group got the message no one else will in the same group(shared behaviour) unless it times out.
         if (consumer2TimeoutResult == undefined) throw new Error("Read failed no batch found for timeout");
         assert.deepStrictEqual(consumer2TimeoutResult.id, consumer1Result.id);
-        assert.deepStrictEqual(consumer2TimeoutResult.name, consumer1Result.name);
         assert.deepStrictEqual(consumer2TimeoutResult.readsInCurrentGroup, 2);
         assert.deepStrictEqual(consumer2TimeoutResult.payload, consumer1Result.payload);
         if (consumer3TimeoutResult == undefined) throw new Error("Read failed no batch found for timeout");
         assert.deepStrictEqual(consumer3TimeoutResult.id, consumer1Result.id);
-        assert.deepStrictEqual(consumer3TimeoutResult.name, consumer1Result.name);
         assert.deepStrictEqual(consumer3TimeoutResult.readsInCurrentGroup, 1); //Since this is a fresh read for another group so fresh delivery
         assert.deepStrictEqual(consumer3TimeoutResult.payload, consumer1Result.payload);
     }).timeout(4000);
@@ -120,9 +112,6 @@ describe(`relief-valve component tests`, () => {
         assert.notStrictEqual(consumer1Result.id, undefined);
         assert.notStrictEqual(consumer1Result.id, null);
         assert.notStrictEqual(consumer1Result.id, "");
-        assert.notStrictEqual(consumer1Result.name, undefined);
-        assert.notStrictEqual(consumer1Result.name, null);
-        assert.notStrictEqual(consumer1Result.name, "");
         assert.strictEqual(consumer1Result.readsInCurrentGroup, 1);
         assert.strictEqual(consumer1Result.payload.has(generatedId), true);
         assert.deepStrictEqual(consumer1Result.payload.get(generatedId), payload);
@@ -154,9 +143,6 @@ describe(`relief-valve component tests`, () => {
             assert.notStrictEqual(consumer1Result.id, undefined);
             assert.notStrictEqual(consumer1Result.id, null);
             assert.notStrictEqual(consumer1Result.id, "");
-            assert.notStrictEqual(consumer1Result.name, undefined);
-            assert.notStrictEqual(consumer1Result.name, null);
-            assert.notStrictEqual(consumer1Result.name, "");
             assert.strictEqual(consumer1Result.readsInCurrentGroup, 1);
             assert.strictEqual(consumer1Result.payload.has(generatedId), true);
             assert.deepStrictEqual(consumer1Result.payload.get(generatedId), payload);

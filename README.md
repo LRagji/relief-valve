@@ -8,7 +8,8 @@ This package is based on [redis stream](https://github.com/LRagji/redis-streams-
 6. Can used as in fan-out topology(each consumer receives the copy of the message).
 7. Batching of messages with respect to count of messages.
 8. Batching of messages with respect to time elapsed from the last write to the stream.
-9. Its Redis cluster compatible. 
+9. Its Redis cluster compatible package.
+10. It provides accumalator sharding functionality
 
 ## Getting Started
 
@@ -48,9 +49,6 @@ for (let counter = 0; counter < 100; counter++) {
         assert.notStrictEqual(consumer1Result.id, undefined);
         assert.notStrictEqual(consumer1Result.id, null);
         assert.notStrictEqual(consumer1Result.id, "");
-        assert.notStrictEqual(consumer1Result.name, undefined);
-        assert.notStrictEqual(consumer1Result.name, null);
-        assert.notStrictEqual(consumer1Result.name, "");
         assert.strictEqual(consumer1Result.readsInCurrentGroup, 1);
         assert.strictEqual(consumer1Result.payload.size, batchsize);
         assert.deepStrictEqual(consumer1Result.payload, payloads);
@@ -79,7 +77,7 @@ assert.deepStrictEqual(length, 0);
 2. Raise a Pull Request.
 
 ## Current Version:
-0.0.1[Beta]
+0.0.2[Beta]
 
 ## License
 

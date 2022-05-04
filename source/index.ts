@@ -25,8 +25,6 @@ export interface IBatch extends IBatchIdentity {
  * Provides identity to the batch accumalated
  */
 export interface IBatchIdentity {
-    /** Name of the accumulator stream inside redis. */
-    name: string,
     /** Stream Id used to acknowledge the message. */
     id: string, //Id of the main stream
 }
@@ -45,7 +43,7 @@ export class ReliefValve {
         private clientName: string,
         private indexKey = name + "Idx",
         private accumalatorKey = (data: object) => Promise.resolve(name + "Acc"),
-        private accumalatorPurgedKey = (accumalatorKey: string) => Promise.resolve(accumalatorKey + "Purged")) {
+        private systemIdPropName = "_id_") {
         if (this.timeThresholdInSeconds < 0) {
             this.timeThresholdInSeconds *= -1;
         }
@@ -63,8 +61,7 @@ export class ReliefValve {
     public async publish(data: object, id = "*"): Promise<string> {
         const token = `publish-${Date.now().toString()}`;
         const accKey = await this.accumalatorKey(data);
-        const accKeyRenamed = await this.constructAccumalatorPurgeKey(accKey, this.groupName, this.clientName);;
-        const keys = [this.indexKey, accKey, accKeyRenamed, this.name];
+        const keys = [this.indexKey, accKey, this.name];
         if (keys.length != Array.from((new Set(keys)).values()).length) {
             throw new Error("Name, IndexKey, AccumalatorKey and AccumalatorPurgedKey cannot be same.")
         }
@@ -73,6 +70,7 @@ export class ReliefValve {
         if (allStrings === false) {
             throw new Error("Publish only support objects having strings as their values.");
         }
+        values.unshift(this.systemIdPropName);
         values.unshift(id);
         values.unshift(this.countThreshold);
         await this.client.acquire(token);
@@ -97,12 +95,11 @@ export class ReliefValve {
                 const accKey: string = accumulatorKeysWithScore[counter];
                 const accKeyScore: string = accumulatorKeysWithScore[counter + 1];
                 asyncHandles.push((async () => {
-                    const accKeyRenamed = await this.constructAccumalatorPurgeKey(accKey, this.groupName, this.clientName);
-                    const keys = [this.indexKey, accKey, accKeyRenamed, this.name];
+                    const keys = [this.indexKey, accKey, this.name];
                     if (keys.length != Array.from((new Set(keys)).values()).length) {
                         throw new Error("Name, IndexKey, AccumalatorKey and AccumalatorPurgedKey cannot be same.")
                     }
-                    await this.client.script(this.timePurgeScript, keys, [accKeyScore]);// Script is used to ensure serializable transactions and score is passed to make it thread safe with other instances.
+                    await this.client.script(this.timePurgeScript, keys, [accKeyScore, this.systemIdPropName]);// Script is used to ensure serializable transactions and score is passed to make it thread safe with other instances.
                 })());
             }
             await Promise.allSettled(asyncHandles);
@@ -119,7 +116,7 @@ export class ReliefValve {
         try {
             await this.createStreamGroupIfNotExists(this.name, this.groupName, this.client);
             const staleResponse = await this.client.run(["XAUTOCLAIM", this.name, this.groupName, this.clientName, (batchIdealThresholdInSeconds * 1000).toString(), "0-0", "COUNT", "1"]);
-            let itemToProcess: string[] | undefined = undefined;
+            let itemToProcess: string[][] | undefined = undefined;
             if (Array.isArray(staleResponse) && staleResponse.length >= 2 && Array.isArray(staleResponse[1]) && staleResponse[1].length > 0) {
                 //We have a stale response
                 itemToProcess = staleResponse[1][0];
@@ -134,8 +131,7 @@ export class ReliefValve {
 
             if (itemToProcess != undefined) {
                 returnValue = {
-                    "id": itemToProcess[0],
-                    "name": itemToProcess[1][1],
+                    "id": itemToProcess[0] as unknown as string,
                     "readsInCurrentGroup": -1,
                     "payload": new Map<string, Object>()
                 };
@@ -143,15 +139,21 @@ export class ReliefValve {
                 if (Array.isArray(retrivalCountResponse) && retrivalCountResponse.length >= 1) {
                     returnValue.readsInCurrentGroup = parseInt(retrivalCountResponse[0][3]);
                 }
-                const serializedPayload = await this.client.run(["XRANGE", returnValue.name, "-", "+"]);
-                if (Array.isArray(serializedPayload) && serializedPayload.length >= 1) {
-                    returnValue.payload = serializedPayload.reduce((acc: Map<string, Object>, entry: any[]) => {
-                        const key = entry[0];
-                        const serializedObject = entry[1];
-                        const pairs = serializedObject.reduce(this.convertFlatKeyValuesToEntries, []);
-                        acc.set(key, Object.fromEntries(pairs));
-                        return acc;
-                    }, returnValue.payload);
+
+                let currentMessageId = "";
+                const serializedPayload = itemToProcess[1];
+                for (let propCounter = 0; propCounter < serializedPayload.length; propCounter += 2) {
+                    const propName = serializedPayload[propCounter];
+                    const propValue = serializedPayload[propCounter + 1];
+                    if (propName === this.systemIdPropName) {
+                        currentMessageId = propValue;
+                        returnValue.payload.set(currentMessageId, {});
+                    }
+                    else {
+                        const payloadObject: any = returnValue.payload.get(currentMessageId) || {};
+                        payloadObject[propName] = propValue;
+                        returnValue.payload.set(currentMessageId, payloadObject);
+                    }
                 }
             }
             return returnValue;
@@ -169,7 +171,6 @@ export class ReliefValve {
             const response = await this.client.run(["XACK", this.name, this.groupName, batch.id]);
             if (response === 1) {
                 if (dropBatch === true) {
-                    await this.client.run(["DEL", batch.name]);
                     await this.client.run(["XDEL", this.name, batch.id]);
                 }
                 return true;
@@ -199,20 +200,5 @@ export class ReliefValve {
                 throw err;
             }
         }
-    }
-
-    private async constructAccumalatorPurgeKey(accKey: string, groupName: string, clientName: string) {
-        return `${await this.accumalatorPurgedKey(accKey)}-${groupName}-${clientName}-${Date.now().toString()}`;
-    }
-
-    private convertFlatKeyValuesToEntries(acc: string[][], e: string, idx: number): string[][] {
-        if (idx % 2 === 1) {
-            const kvp = acc.pop() as string[];
-            kvp.push(e);
-            acc.push(kvp);
-        } else {
-            acc.push([e]);
-        }
-        return acc;
     }
 } 
