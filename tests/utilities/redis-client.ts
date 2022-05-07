@@ -33,7 +33,7 @@ export class RedisClient implements IRedisClient {
 
     async pipeline(commands: string[][]): Promise<any> {
         // console.log(commands);
-        // @ts-ignore:
+        // @ts-expect-error
         const result = await this.redisClient.multi(commands)
             .exec();
         const finalResult = result?.map(r => {
