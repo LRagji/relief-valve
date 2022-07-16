@@ -1,6 +1,6 @@
 # Relief Valve
 This package is based on [redis stream](https://github.com/LRagji/redis-streams-broker) data type and provides you with following features
-1. It is agnostic to any redis client library can be used with [ioredis](https://www.npmjs.com/package/ioredis) or [redis](https://www.npmjs.com/package/redis) or any of your favourite redis client implementation as long as it satisfies [IRedisClient Interface](https://github.com/LRagji/relief-valve/blob/b33b85ec7f08438a67dda8b885432e53791f7623/source/index.ts#L3).
+1. It is agnostic to any redis client library can be used with [ioredis](https://www.npmjs.com/package/ioredis) or [redis](https://www.npmjs.com/package/redis) or any of your favourite redis client implementation as long as it satisfies [IRedisClientPool Interface](./tests/utilities/redis-client-pool.ts).
 2. This package acts like a pressure relief value used in plumbing; this pattern is used to batch multiple messages in the stream into a single group and deliver it to consumer, used case for data ingestions and other places where batching is needed.
 3. It can be used as simple que without batching, for sharding messages within multiple consumers for H-Scalling
 4. It provides guarantee for message delivery and or processing with acknowledge facility.
@@ -77,7 +77,7 @@ assert.deepStrictEqual(length, 0);
 2. Raise a Pull Request.
 
 ## Current Version:
-0.0.2[Beta]
+0.0.3[Beta]
 
 ## License
 
@@ -94,9 +94,9 @@ This project is contrubution to public domain and completely free for use, view 
 1. Typing info included with the package.
 2. Type doc[W.I.P]
 
-## Example impementation of IRedisClient
+## Example impementation of IRedisClientPool
 
-A non pooled implmentation
+A pooled implmentation
 
 ```Typescript
 import { IRedisClient } from '../../source/index';
@@ -104,54 +104,88 @@ import ioredis from 'ioredis';
 import fs from 'fs';
 import Crypto from "crypto";
 
-export class RedisClient implements IRedisClient {
-    private redisClient: ioredis;
-    private filenameToCommand = new Map<string, string>();
+export class  RedisClientPool implements IRedisClientPool {
+    private poolRedisClients: ioredis[];
+    private activeRedisClients: Map<string, ioredis>;
+    private filenameToCommand = new Map();
+    private redisConnectionString: string;
+    private idlePoolSize: number;
+    private totalConnectionCounter = 0;
 
-    constructor(redisConnectionString: string) {
-        this.redisClient = new ioredis(redisConnectionString);
+    constructor(redisConnectionString: string, idlePoolSize = 6) {
+        this.poolRedisClients = Array.from({ length: idlePoolSize }, (_) => new ioredis(redisConnectionString));
+        this.totalConnectionCounter += idlePoolSize;
+        this.activeRedisClients = new Map<string, ioredis>();
+        this.redisConnectionString = redisConnectionString;
+        this.idlePoolSize = idlePoolSize;
     }
 
-    async shutdown(): Promise<void> {
-        await this.redisClient.quit();
-        this.redisClient.disconnect();
+    async shutdown() {
+        const waitHandles = [...this.poolRedisClients, ...Array.from(this.activeRedisClients.values())]
+            .map(async _ => { await _.quit(); await _.disconnect(); });
+        await Promise.allSettled(waitHandles);
+
+        this.poolRedisClients = [];
+        this.activeRedisClients.clear();
+        this.totalConnectionCounter = 0;
     }
 
-    async acquire(token: string): Promise<void> {
-        //console.time(token);
+    async acquire(token: string) {
+        if (!this.activeRedisClients.has(token)) {
+            const availableClient = this.poolRedisClients.pop() || (() => { this.totalConnectionCounter += 1; return new ioredis(this.redisConnectionString); })();
+            this.activeRedisClients.set(token, availableClient);
+        }
     }
 
-    async release(token: string): Promise<void> {
-        //console.timeEnd(token);
+    async release(token: string) {
+        if (this.activeRedisClients.has(token)) {
+            const releasedClient = this.activeRedisClients.get(token);
+            if (releasedClient == undefined) return;
+            this.activeRedisClients.delete(token);
+            if (this.poolRedisClients.length < this.idlePoolSize) {
+                this.poolRedisClients.push(releasedClient);
+            }
+            else {
+                await releasedClient.quit();
+                await releasedClient.disconnect();
+            }
+        }
     }
 
-    async run(commandArgs: string[]): Promise<any> {
-        //console.log(commandArgs);
-        const v = await this.redisClient.call(commandArgs.shift() as string, ...commandArgs);
-        //console.log(v);
+    async run(token: string, commandArgs: any) {
+        const redisClient = this.activeRedisClients.get(token);
+        if (redisClient == undefined) {
+            throw new Error("Please acquire a client with proper token");
+        }
+        const v = await redisClient.call(commandArgs.shift(), ...commandArgs);
         return v;
     }
 
-    async pipeline(commands: string[][]): Promise<any> {
-        // console.log(commands);
-        // @ts-expect-error
-        const result = await this.redisClient.multi(commands)
+    async pipeline(token: string, commands: string[][]) {
+        const redisClient = this.activeRedisClients.get(token);
+        if (redisClient == undefined) {
+            throw new Error("Please acquire a client with proper token");
+        }
+        const result = await redisClient.multi(commands)
             .exec();
         const finalResult = result?.map(r => {
-            let err = r.shift();
+            let err = r[0];
             if (err != null) {
                 throw err;
             }
-            return r[0];
+            return r[1];
         });
-        // console.log(finalResult);
         return finalResult;
     }
 
-    async script(filename: string, keys: string[], args: string[]): Promise<any> {
+    async script(token: string, filename: string, keys: any, args: any) {
+        const redisClient = this.activeRedisClients.get(token);
+        if (redisClient == undefined) {
+            throw new Error("Please acquire a client with proper token");
+        }
         let command = this.filenameToCommand.get(filename);
         if (command == null) {
-            const contents = await new Promise<string>((acc, rej) => {
+            const contents = await new Promise<any>((acc, rej) => {
                 fs.readFile(filename, "utf8", (err, data) => {
                     if (err !== null) {
                         rej(err);
@@ -160,15 +194,23 @@ export class RedisClient implements IRedisClient {
                 });
             });
             command = Crypto.createHash("sha256").update(contents, "binary").digest("hex")
-            this.redisClient.defineCommand(command, { lua: contents });
+            redisClient.defineCommand(command, { lua: contents });
             this.filenameToCommand.set(filename, command);
         }
-        // console.log(keys);
-        // console.log(args);
-        //console.log(filename);
-        const results = await this.redisClient[command](keys.length, keys, args);
-        //console.log(results);
+        // @ts-ignore
+        const results = await redisClient[command](keys.length, keys, args);
         return results;
+    }
+
+    info() {
+        const returnObj = {
+            "Idle Size": this.idlePoolSize,
+            "Current Active": this.activeRedisClients.size,
+            "Pooled Connection": this.poolRedisClients.length,
+            "Peak Connections": this.totalConnectionCounter
+        };
+        this.totalConnectionCounter = 0;
+        return returnObj;
     }
 }
 ```

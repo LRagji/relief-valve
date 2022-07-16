@@ -2,40 +2,43 @@ import path from "path";
 /**
 * Interface used to abstract a redis client/connection for this package
 */
-export interface IRedisClient {
+export interface IRedisClientPool {
     /**
      * This method acquires a redis client instance from a pool of redis clients with token as an identifier/handle.
      * @param token A unique string used to acquire a redis client instance against. Treat this as redis client handle.
      */
-    acquire(token?: string): Promise<void>
+    acquire(token: string): Promise<void>
     /**
      * This method releases the acquired redis client back into the pool.
      * @param token A unique string used when acquiring client via {@link acquire} method
      */
-    release(token?: string): Promise<void>
+    release(token: string): Promise<void>
     /**
      * Signals a dispose method to the pool stating no more clients will be needed, donot call any methods post calling shutdown. 
      */
     shutdown(): Promise<void>
     /**
      * Executes a single command on acquired connection.
+     * @param token token string which was used to acquire.
      * @param commandArgs Array of strings including commands and arguments Eg:["set","key","value"]
      * @returns Promise of any type.
      */
-    run(commandArgs: string[]): Promise<any>
+    run(token: string, commandArgs: string[]): Promise<any>
     /**
      * This method is used to execute a set of commands in one go sequentially on redis side.
+     * @param token token string which was used to acquire.
      * @param commands Array of array of strings including multiple commands and arguments that needs to be executed in one trip to the server sequentially. Eg:[["set","key","value"],["get","key"]]
      * @returns Promise of all results in the commands(any type).
      */
-    pipeline(commands: string[][]): Promise<any>;
+    pipeline(token: string, commands: string[][]): Promise<any>;
     /**
      * This method is used to execute a lua script on redis connection.
+     * @param token token string which was used to acquire.
      * @param filename Full file path of the lua script to be executed Eg: path.join(__dirname, "script.lua")
      * @param keys Array of strings, Keys to be passsed to the script. 
      * @param args Array of strings, Arguments to be passed to the script.
      */
-    script(filename: string, keys: string[], args: string[]): Promise<any>
+    script(token: string, filename: string, keys: string[], args: string[]): Promise<any>
 }
 
 /**
@@ -62,7 +65,7 @@ export class ReliefValve {
     private timePurgeScript = path.join(__dirname, "time_purge.lua");
     private groupsCreated = new Set();
 
-    constructor(private client: IRedisClient,
+    constructor(private client: IRedisClientPool,
         private name: string,
         private countThreshold: number,
         private timeThresholdInSeconds: number,
@@ -104,7 +107,7 @@ export class ReliefValve {
         values.unshift(this.countThreshold);
         await this.client.acquire(token);
         try {
-            const response = await this.client.script(this.writeScript, keys, values);
+            const response = await this.client.script(token, this.writeScript, keys, values);
             return response[0];
         }
         finally {
@@ -116,9 +119,9 @@ export class ReliefValve {
         const token = `recheckTimeThreshold-${Date.now().toString()}`;
         await this.client.acquire(token);
         try {
-            const redisTimeResponse = await this.client.run(["TIME"]);
+            const redisTimeResponse = await this.client.run(token, ["TIME"]);
             const redisTime = parseInt(redisTimeResponse[0]);
-            const accumulatorKeysWithScore = await this.client.run(["ZRANGE", this.indexKey, "-inf", (redisTime - this.timeThresholdInSeconds).toString(), "BYSCORE", "WITHSCORES"]);
+            const accumulatorKeysWithScore = await this.client.run(token, ["ZRANGE", this.indexKey, "-inf", (redisTime - this.timeThresholdInSeconds).toString(), "BYSCORE", "WITHSCORES"]);
             const asyncHandles = [];
             for (let counter = 0; counter < accumulatorKeysWithScore.length; counter += 2) {
                 const accKey: string = accumulatorKeysWithScore[counter];
@@ -128,7 +131,7 @@ export class ReliefValve {
                     if (keys.length != Array.from((new Set(keys)).values()).length) {
                         throw new Error("Name, IndexKey, AccumalatorKey and AccumalatorPurgedKey cannot be same.")
                     }
-                    await this.client.script(this.timePurgeScript, keys, [accKeyScore, this.systemIdPropName]);// Script is used to ensure serializable transactions and score is passed to make it thread safe with other instances.
+                    await this.client.script(token, this.timePurgeScript, keys, [accKeyScore, this.systemIdPropName]);// Script is used to ensure serializable transactions and score is passed to make it thread safe with other instances.
                 })());
             }
             await Promise.allSettled(asyncHandles);
@@ -143,8 +146,8 @@ export class ReliefValve {
         let returnValue: IBatch | undefined = undefined;
         await this.client.acquire(token);
         try {
-            await this.createStreamGroupIfNotExists(this.name, this.groupName, this.client);
-            const staleResponse = await this.client.run(["XAUTOCLAIM", this.name, this.groupName, this.clientName, (batchIdealThresholdInSeconds * 1000).toString(), "0-0", "COUNT", "1"]);
+            await this.createStreamGroupIfNotExists(this.name, this.groupName, this.client, token);
+            const staleResponse = await this.client.run(token, ["XAUTOCLAIM", this.name, this.groupName, this.clientName, (batchIdealThresholdInSeconds * 1000).toString(), "0-0", "COUNT", "1"]);
             let itemToProcess: string[][] | undefined = undefined;
             if (Array.isArray(staleResponse) && staleResponse.length >= 2 && Array.isArray(staleResponse[1]) && staleResponse[1].length > 0) {
                 //We have a stale response
@@ -152,7 +155,7 @@ export class ReliefValve {
             }
             else {
                 //We need to pluck fresh ones.
-                const freshResponse = await this.client.run(["XREADGROUP", "GROUP", this.groupName, this.clientName, "COUNT", "1", "STREAMS", this.name, ">"]);
+                const freshResponse = await this.client.run(token, ["XREADGROUP", "GROUP", this.groupName, this.clientName, "COUNT", "1", "STREAMS", this.name, ">"]);
                 if (Array.isArray(freshResponse) && freshResponse.length >= 1 && Array.isArray(freshResponse[0]) && freshResponse[0].length >= 2 && freshResponse[0][1].length > 0) {
                     itemToProcess = freshResponse[0][1][0];
                 }
@@ -164,7 +167,7 @@ export class ReliefValve {
                     "readsInCurrentGroup": -1,
                     "payload": new Map<string, Object>()
                 };
-                const retrivalCountResponse = await this.client.run(["XPENDING", this.name, this.groupName, returnValue.id, returnValue.id, "1"]);
+                const retrivalCountResponse = await this.client.run(token, ["XPENDING", this.name, this.groupName, returnValue.id, returnValue.id, "1"]);
                 if (Array.isArray(retrivalCountResponse) && retrivalCountResponse.length >= 1) {
                     returnValue.readsInCurrentGroup = parseInt(retrivalCountResponse[0][3]);
                 }
@@ -196,11 +199,11 @@ export class ReliefValve {
         const token = `acknowledge-${Date.now().toString()}`;
         await this.client.acquire(token);
         try {
-            await this.createStreamGroupIfNotExists(this.name, this.groupName, this.client);
-            const response = await this.client.run(["XACK", this.name, this.groupName, batch.id]);
+            await this.createStreamGroupIfNotExists(this.name, this.groupName, this.client, token);
+            const response = await this.client.run(token, ["XACK", this.name, this.groupName, batch.id]);
             if (response === 1) {
                 if (dropBatch === true) {
-                    await this.client.run(["XDEL", this.name, batch.id]);
+                    await this.client.run(token, ["XDEL", this.name, batch.id]);
                 }
                 return true;
             }
@@ -213,12 +216,12 @@ export class ReliefValve {
         }
     }
 
-    private async createStreamGroupIfNotExists(streamName: string, groupName: string, acquiredClient: IRedisClient, cache = this.groupsCreated): Promise<void> {
+    private async createStreamGroupIfNotExists(streamName: string, groupName: string, acquiredClient: IRedisClientPool, token: string, cache = this.groupsCreated): Promise<void> {
         if (cache.has(groupName)) {
             return;
         }
         try {
-            await acquiredClient.run(["XGROUP", "CREATE", streamName, groupName, "0", "MKSTREAM"]);
+            await acquiredClient.run(token, ["XGROUP", "CREATE", streamName, groupName, "0", "MKSTREAM"]);
             cache.add(groupName);
         }
         catch (err: any) {

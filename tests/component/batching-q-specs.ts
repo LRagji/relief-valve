@@ -1,7 +1,7 @@
 import * as assert from 'assert';
-import { IBatchIdentity, IRedisClient, ReliefValve } from '../../source/index';
-import { RedisClient } from '../utilities/redis-client'
-let client: IRedisClient;
+import { IBatchIdentity, IRedisClientPool, ReliefValve } from '../../source/index';
+import { RedisClientPool } from '../utilities/redis-client-pool'
+let client: IRedisClientPool;
 const name = "TestStream";
 const delay = (timeInMillis: number) => new Promise((acc, rej) => setTimeout(acc, timeInMillis));
 
@@ -12,8 +12,15 @@ describe(`relief-valve component tests`, () => {
     // Time Batch Mode
 
     beforeEach(async function () {
-        client = new RedisClient(process.env.REDISCON as string);
-        await client.run(["FLUSHALL"]);
+        client = new RedisClientPool(process.env.REDISCON as string);
+        const token = "ST" + Date.now();
+        await client.acquire(token);
+        try {
+            await client.run(token, ["FLUSHALL"]);
+        }
+        finally {
+            await client.release(token);
+        }
     });
 
     afterEach(async function () {
@@ -56,10 +63,18 @@ describe(`relief-valve component tests`, () => {
                 assert.deepStrictEqual(consumer1Result, undefined);
             }
         }
-        const keys = await client.run(["KEYS", "*"]);
-        const length = await client.run(["XLEN", name]);
-        assert.deepStrictEqual(keys, [name]);
-        assert.deepStrictEqual(length, 0);
+        const token = "T2" + Date.now();
+        await client.acquire(token);
+        try {
+            const keys = await client.run(token, ["KEYS", "*"]);
+            const length = await client.run(token, ["XLEN", name]);
+            assert.deepStrictEqual(keys, [name]);
+            assert.deepStrictEqual(length, 0);
+        }
+        finally {
+            await client.release(token);
+        }
+
     });
 
     it('should be able to publish data in que, and consume the same with specified time elapsed is reached post last write', async () => {
@@ -109,9 +124,17 @@ describe(`relief-valve component tests`, () => {
                 assert.deepStrictEqual(consumer1Result, undefined);
             }
         }
-        const keys = await client.run(["KEYS", "*"]);
-        const length = await client.run(["XLEN", name]);
-        assert.deepStrictEqual(keys, [name]);
-        assert.deepStrictEqual(length, 0);
+        const token = "T3" + Date.now();
+        await client.acquire(token);
+        try {
+            const keys = await client.run(token, ["KEYS", "*"]);
+            const length = await client.run(token, ["XLEN", name]);
+            assert.deepStrictEqual(keys, [name]);
+            assert.deepStrictEqual(length, 0);
+        }
+        finally {
+            await client.release(token);
+        }
+
     }).timeout(15000);
 });
