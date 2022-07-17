@@ -99,15 +99,14 @@ This project is contrubution to public domain and completely free for use, view 
 A pooled implmentation
 
 ```Typescript
-import { IRedisClient } from '../../source/index';
+import { IRedisClientPool } from '../../source/index';
 import ioredis from 'ioredis';
 import fs from 'fs';
 import Crypto from "crypto";
-
-export class  RedisClientPool implements IRedisClientPool {
+export class RedisClientPool implements IRedisClientPool {
     private poolRedisClients: ioredis[];
     private activeRedisClients: Map<string, ioredis>;
-    private filenameToCommand = new Map();
+    private filenameToCommand = new Map<string, string>();
     private redisConnectionString: string;
     private idlePoolSize: number;
     private totalConnectionCounter = 0;
@@ -178,13 +177,14 @@ export class  RedisClientPool implements IRedisClientPool {
         return finalResult;
     }
 
-    async script(token: string, filename: string, keys: any, args: any) {
+    async script(token: string, filename: string, keys: string[], args: any[]) {
         const redisClient = this.activeRedisClients.get(token);
         if (redisClient == undefined) {
             throw new Error("Please acquire a client with proper token");
         }
         let command = this.filenameToCommand.get(filename);
-        if (command == null) {
+        // @ts-ignore
+        if (command == null || redisClient[command] == null) {
             const contents = await new Promise<any>((acc, rej) => {
                 fs.readFile(filename, "utf8", (err, data) => {
                     if (err !== null) {
