@@ -216,6 +216,8 @@ export class ReliefValve {
         }
     }
 
+
+    //-------------------------------------------------------------------------Private Methods------------------------------------------------------------------------------------
     private async createStreamGroupIfNotExists(streamName: string, groupName: string, acquiredClient: IRedisClientPool, token: string, cache = this.groupsCreated): Promise<void> {
         if (cache.has(groupName)) {
             return;
