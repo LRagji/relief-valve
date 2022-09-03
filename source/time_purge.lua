@@ -16,18 +16,21 @@ if (actualScore == score) then -- This check is done to make actual operations t
     -- Purge
     local clonedData = {}
     local results = redis.call("XRANGE", accKey, "-", "+")
+    local streamIDsToDrop = {}
     for _, data in ipairs(results) do
+        local streamId = data[1]
         table.insert(clonedData, idPropName)
-        table.insert(clonedData, data[1])
+        table.insert(clonedData, streamId)
         for _, kvp in ipairs(data[2]) do
             table.insert(clonedData, kvp)
         end
+        table.insert(streamIDsToDrop, streamId)
     end
     -- Insert
     if (#clonedData > 0) then
         redis.call("XADD", purgeKey, "*", unpack(clonedData))
     end
-    redis.call("DEL", accKey)
+    redis.call("XDEL", accKey, unpack(streamIDsToDrop))
     redis.call("ZREM", indexKey, accKey)
     table.insert(returnArray, 1)
 else

@@ -38,7 +38,6 @@ if (currentAccLen >= countThreshold) then
         end
         table.insert(streamIDsToDrop, streamId)
     end
-    redis.call("XDEL", accKey, unpack(streamIDsToDrop))
     -- Insert
     if (#clonedData > 0) then
         if (maxlength >= 1) then
@@ -47,6 +46,7 @@ if (currentAccLen >= countThreshold) then
             redis.call("XADD", purgeKey, "*", unpack(clonedData))
         end
     end
+    redis.call("XDEL", accKey, unpack(streamIDsToDrop))
     redis.call("ZREM", indexKey, accKey)
     table.insert(returnArray, 1)
 else
