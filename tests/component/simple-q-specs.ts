@@ -158,13 +158,25 @@ describe(`relief-valve component tests`, () => {
         const token = "T1" + Date.now();
         await client.acquire(token);
         try {
-            const keys = await client.run(token, ["KEYS", "*"]);
+            const keys = await client.run(token, ["KEYS", "*"]) as Array<string>;
             const length = await client.run(token, ["XLEN", name]);
-            assert.deepStrictEqual(keys, [name]);
+            assert.deepStrictEqual(keys.length, 2);
+            assert.deepStrictEqual(keys.indexOf(name) >= 0, true);
+            assert.deepStrictEqual(keys.indexOf((name + "Acc")) >= 0, true);
             assert.deepStrictEqual(length, 0);
         }
         finally {
             await client.release(token);
         }
+    });
+
+    it('should be able to work in with a custom ID and stop if the same ID is already pushed.', async () => {
+        //Setup
+        const publisherInstance = new ReliefValve(client, name, 1, 1, "PubGroup", "Publisher1");
+        const payload = { "hello": "world1", "A": "1", "Z": "26", "B": "2" };
+        const id = "0-1";
+        const generatedId1 = await publisherInstance.publish(payload, id);
+        assert.deepStrictEqual(generatedId1, id);
+        await assert.rejects(publisherInstance.publish(payload, id));
     });
 });

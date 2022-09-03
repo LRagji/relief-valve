@@ -66,10 +66,14 @@ describe(`relief-valve component tests`, () => {
         const token = "T2" + Date.now();
         await client.acquire(token);
         try {
-            const keys = await client.run(token, ["KEYS", "*"]);
-            const length = await client.run(token, ["XLEN", name]);
-            assert.deepStrictEqual(keys, [name]);
-            assert.deepStrictEqual(length, 0);
+            const keys = await client.run(token, ["KEYS", "*"]) as Array<string>;
+            const mainQlength = await client.run(token, ["XLEN", name]);
+            const accQlength = await client.run(token, ["XLEN", (name + "Acc")]);
+            assert.deepStrictEqual(keys.length, 2);
+            assert.deepStrictEqual(keys.indexOf(name) >= 0, true);
+            assert.deepStrictEqual(keys.indexOf((name + "Acc")) >= 0, true);
+            assert.deepStrictEqual(mainQlength, 0);
+            assert.deepStrictEqual(accQlength, 0);
         }
         finally {
             await client.release(token);

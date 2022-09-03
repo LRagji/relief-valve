@@ -28,13 +28,17 @@ if (currentAccLen >= countThreshold) then
     -- Purge
     local clonedData = {}
     local results = redis.call("XRANGE", accKey, "-", "+")
+    local streamIDsToDrop = {}
     for _, data in ipairs(results) do
+        local streamId = data[1]
         table.insert(clonedData, idPropName)
-        table.insert(clonedData, data[1])
+        table.insert(clonedData, streamId)
         for _, kvp in ipairs(data[2]) do
             table.insert(clonedData, kvp)
         end
+        table.insert(streamIDsToDrop, streamId)
     end
+    redis.call("XDEL", accKey, unpack(streamIDsToDrop))
     -- Insert
     if (#clonedData > 0) then
         if (maxlength >= 1) then
@@ -43,7 +47,6 @@ if (currentAccLen >= countThreshold) then
             redis.call("XADD", purgeKey, "*", unpack(clonedData))
         end
     end
-    redis.call("DEL", accKey)
     redis.call("ZREM", indexKey, accKey)
     table.insert(returnArray, 1)
 else
