@@ -64,7 +64,13 @@ export class ReliefValve {
     private writeScript = path.join(__dirname, "write_count_purge.lua");
     private timePurgeScript = path.join(__dirname, "time_purge.lua");
     private groupsCreated = new Set();
-
+    /** Used to contruct and instance of the class.
+     * @param client Connector through which this instance will talk to redis.
+     * @param name A unique name for the Queue/Stream for the consumers to subscribe on.
+     * @param countThreshold A positive number which acts as a setpoint for the relief valve(pressure release point), negative numbers will be converted to positive and zero to 1.
+     * @param timeThresholdInSeconds A positive number in seconds which acts as elapsed time in future post which the valve will be opened even if count threshold is not reached from the last time of write, negative numbers will be converted to positive and zero to 1.
+     *
+     */
     constructor(private client: IRedisClientPool,
         private name: string,
         private countThreshold: number,
