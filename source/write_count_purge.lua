@@ -11,7 +11,9 @@ local countThreshold = tonumber(ARGV[1])
 local dataId = ARGV[2]
 local idPropName = ARGV[3]
 local maxlength = tonumber(ARGV[4])
+local releaseCount = tonumber(ARGV[5])
 local data = ARGV
+table.remove(data, 1)
 table.remove(data, 1)
 table.remove(data, 1)
 table.remove(data, 1)
@@ -27,7 +29,12 @@ local currentAccLen = redis.call("XLEN", accKey)
 if (currentAccLen >= countThreshold) then
     -- Purge
     local clonedData = {}
-    local results = redis.call("XRANGE", accKey, "-", "+")
+    local results
+    if (releaseCount == -1) then
+        results = redis.call("XRANGE", accKey, "-", "+")
+    else
+        results = redis.call("XRANGE", accKey, "-", "+", "COUNT", releaseCount)
+    end
     local streamIDsToDrop = {}
     for _, data in ipairs(results) do
         local streamId = data[1]
@@ -47,7 +54,6 @@ if (currentAccLen >= countThreshold) then
         end
     end
     redis.call("XDEL", accKey, unpack(streamIDsToDrop))
-    redis.call("ZREM", indexKey, accKey)
     table.insert(returnArray, 1)
 else
     table.insert(returnArray, 0)

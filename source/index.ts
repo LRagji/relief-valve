@@ -74,7 +74,8 @@ export class ReliefValve {
         private indexKey = name + "Idx",
         private accumalatorKey = (data: object) => Promise.resolve(name + "Acc"),
         private cappedStreamLength = -1,
-        private systemIdPropName = "_id_") {
+        private systemIdPropName = "_id_",
+        private releaseCount = -1) {
         if (this.timeThresholdInSeconds < 0) {
             this.timeThresholdInSeconds *= -1;
         }
@@ -86,6 +87,9 @@ export class ReliefValve {
         }
         if (this.countThreshold === 0) {
             this.countThreshold = 1;
+        }
+        if (releaseCount < -1 || releaseCount === 0) {
+            releaseCount = -1
         }
     }
 
@@ -101,6 +105,7 @@ export class ReliefValve {
         if (allStrings === false) {
             throw new Error("Publish only support objects having strings as their values.");
         }
+        values.unshift(this.releaseCount);
         values.unshift(this.cappedStreamLength);
         values.unshift(this.systemIdPropName);
         values.unshift(id);
@@ -115,7 +120,7 @@ export class ReliefValve {
         }
     }
 
-    public async recheckTimeThreshold(): Promise<void> {
+    public async recheckTimeThreshold(refreshTimeOnSucessfullPurge = -1): Promise<void> {
         const token = `recheckTimeThreshold-${Date.now().toString()}`;
         await this.client.acquire(token);
         try {
@@ -131,7 +136,7 @@ export class ReliefValve {
                     if (keys.length != Array.from((new Set(keys)).values()).length) {
                         throw new Error("Name, IndexKey, AccumalatorKey and AccumalatorPurgedKey cannot be same.")
                     }
-                    await this.client.script(token, this.timePurgeScript, keys, [accKeyScore, this.systemIdPropName]);// Script is used to ensure serializable transactions and score is passed to make it thread safe with other instances.
+                    await this.client.script(token, this.timePurgeScript, keys, [accKeyScore, this.systemIdPropName, this.releaseCount.toString(), refreshTimeOnSucessfullPurge.toString()]);// Script is used to ensure serializable transactions and score is passed to make it thread safe with other instances.
                 })());
             }
             await Promise.allSettled(asyncHandles);

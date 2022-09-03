@@ -9,13 +9,20 @@ local purgeKey = KEYS[3]
 
 local score = ARGV[1]
 local idPropName = ARGV[2]
+local releaseCount = tonumber(ARGV[3])
+local refreshTimeOnSucessfullPurge = tonumber(ARGV[4])
 local returnArray = {}
 
 local actualScore = redis.call("ZSCORE", indexKey, accKey)
 if (actualScore == score) then -- This check is done to make actual operations transactional and thread safe.
     -- Purge
     local clonedData = {}
-    local results = redis.call("XRANGE", accKey, "-", "+")
+    local results
+    if (releaseCount == -1) then
+        results = redis.call("XRANGE", accKey, "-", "+")
+    else
+        results = redis.call("XRANGE", accKey, "-", "+", "COUNT", releaseCount)
+    end
     local streamIDsToDrop = {}
     for _, data in ipairs(results) do
         local streamId = data[1]
@@ -31,7 +38,11 @@ if (actualScore == score) then -- This check is done to make actual operations t
         redis.call("XADD", purgeKey, "*", unpack(clonedData))
     end
     redis.call("XDEL", accKey, unpack(streamIDsToDrop))
-    redis.call("ZREM", indexKey, accKey)
+    if (refreshTimeOnSucessfullPurge == 0) then
+        local tempTime = redis.call("TIME")
+        local currentTimestampInSeconds = tonumber(tempTime[1])
+        redis.call("ZADD", indexKey, currentTimestampInSeconds, accKey)
+    end
     table.insert(returnArray, 1)
 else
     table.insert(returnArray, 0)

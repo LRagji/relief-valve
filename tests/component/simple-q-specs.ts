@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { IBatchIdentity, IRedisClientPool, ReliefValve } from '../../source/index';
+import { IBatch, IBatchIdentity, IRedisClientPool, ReliefValve } from '../../source/index';
 import { RedisClientPool } from '../utilities/redis-client-pool'
 let client: IRedisClientPool;
 const name = "TestStream";
@@ -160,9 +160,10 @@ describe(`relief-valve component tests`, () => {
         try {
             const keys = await client.run(token, ["KEYS", "*"]) as Array<string>;
             const length = await client.run(token, ["XLEN", name]);
-            assert.deepStrictEqual(keys.length, 2);
+            assert.deepStrictEqual(keys.length, 3);
             assert.deepStrictEqual(keys.indexOf(name) >= 0, true);
             assert.deepStrictEqual(keys.indexOf((name + "Acc")) >= 0, true);
+            assert.deepStrictEqual(keys.indexOf((name + "Idx")) >= 0, true);
             assert.deepStrictEqual(length, 0);
         }
         finally {
@@ -178,5 +179,32 @@ describe(`relief-valve component tests`, () => {
         const generatedId1 = await publisherInstance.publish(payload, id);
         assert.deepStrictEqual(generatedId1, id);
         await assert.rejects(publisherInstance.publish(payload, id));
+    });
+
+    it('should be able to work in grouped accumulators.', async () => {
+        //Setup
+        const publisherInstance = new ReliefValve(client, name, 1, 1, "PubGroup", "Publisher1", undefined, (data: any) => Promise.resolve(data["groupKey"]));
+        const payload = { "hello": "world1", "groupKey": "1" };
+        let id = "0-1";
+        const generatedId1 = await publisherInstance.publish(payload, id);
+        assert.deepStrictEqual(generatedId1, id);
+        const notification = await publisherInstance.consumeFreshOrStale(60);
+        assert.notDeepEqual(notification, undefined);
+        const response = await publisherInstance.acknowledge(notification as IBatch);
+        assert.deepEqual(response, true);
+        const token = "T3" + Date.now();
+        await client.acquire(token);
+        try {
+            const keys = await client.run(token, ["KEYS", "*"]) as Array<string>;
+            const length = await client.run(token, ["XLEN", name]);
+            assert.deepStrictEqual(keys.length, 3);
+            assert.deepStrictEqual(keys.indexOf(name) >= 0, true);
+            assert.deepStrictEqual(keys.indexOf((payload.groupKey)) >= 0, true);
+            assert.deepStrictEqual(keys.indexOf((name + "Idx")) >= 0, true);
+            assert.deepStrictEqual(length, 0);
+        }
+        finally {
+            await client.release(token);
+        }
     });
 });
