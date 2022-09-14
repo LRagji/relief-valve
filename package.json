@@ -1,6 +1,6 @@
 {
   "name": "relief-valve",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "This is a simple library for Redis Streams data type, which is used to accumulate messages until a specified threshold is reached, post which the same is available to consumer stream.",
   "main": "index.js",
   "scripts": {
