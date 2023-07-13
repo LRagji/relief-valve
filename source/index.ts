@@ -39,6 +39,13 @@ export interface IRedisClientPool {
      * @param args Array of strings, Arguments to be passed to the script.
      */
     script(token: string, filename: string, keys: string[], args: string[]): Promise<any>
+
+    /**
+     * This method should provide unique token for a given prefix.
+     * @param prefix An identity string for token to prepend.
+     */
+    generateUniqueToken(prefix: string): string;
+
 }
 
 /**
@@ -100,7 +107,7 @@ export class ReliefValve {
     }
 
     public async publish(data: object, id = "*"): Promise<string> {
-        const token = `publish-${Date.now().toString()}`;
+        const token = this.client.generateUniqueToken("publish");
         const accKey = await this.accumalatorKey(data);
         const keys = [this.indexKey, accKey, this.name];
         if (keys.length != Array.from((new Set(keys)).values()).length) {
@@ -127,7 +134,7 @@ export class ReliefValve {
     }
 
     public async recheckTimeThreshold(refreshTimeOnSucessfullPurge = -1): Promise<void> {
-        const token = `recheckTimeThreshold-${Date.now().toString()}`;
+        const token = this.client.generateUniqueToken("recheckTimeThreshold");
         await this.client.acquire(token);
         try {
             const redisTimeResponse = await this.client.run(token, ["TIME"]);
@@ -153,7 +160,7 @@ export class ReliefValve {
     }
 
     public async consumeFreshOrStale(batchIdealThresholdInSeconds: number): Promise<IBatch | undefined> {
-        const token = `consumeFreshOrPending-${Date.now().toString()}`;
+        const token = this.client.generateUniqueToken("consumeFreshOrPending");
         let returnValue: IBatch | undefined = undefined;
         await this.client.acquire(token);
         try {
@@ -207,7 +214,7 @@ export class ReliefValve {
     }
 
     public async acknowledge(batch: IBatchIdentity, dropBatch = true): Promise<boolean> {
-        const token = `acknowledge-${Date.now().toString()}`;
+        const token = this.client.generateUniqueToken("acknowledge");
         await this.client.acquire(token);
         try {
             await this.createStreamGroupIfNotExists(this.name, this.groupName, this.client, token);
@@ -226,7 +233,6 @@ export class ReliefValve {
             await this.client.release(token);
         }
     }
-
 
     //-------------------------------------------------------------------------Private Methods------------------------------------------------------------------------------------
     private async createStreamGroupIfNotExists(streamName: string, groupName: string, acquiredClient: IRedisClientPool, token: string, cache = this.groupsCreated): Promise<void> {

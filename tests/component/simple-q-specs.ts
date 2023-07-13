@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import { IBatch, IBatchIdentity, IRedisClientPool, ReliefValve } from '../../source/index';
-import { RedisClientPool } from '../utilities/redis-client-pool'
+import { RedisClientClusterFactory, RedisClientPool } from '../utilities/redis-client-pool'
 let client: IRedisClientPool;
 const name = "TestStream";
 const delay = (timeInMillis: number) => new Promise((acc, rej) => setTimeout(acc, timeInMillis));
@@ -15,7 +15,7 @@ describe(`relief-valve component tests`, () => {
     // Excludes Batch Mode.
 
     beforeEach(async function () {
-        client = new RedisClientPool(process.env.REDISCON as string);
+        client = new RedisClientPool(() => RedisClientClusterFactory([process.env.REDISCON as string]), 2);
         const token = "ST" + Date.now();
         await client.acquire(token);
         try {
