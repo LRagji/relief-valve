@@ -49,5 +49,8 @@
     "ts-node": "^10.7.0",
     "typedoc": "^0.22.14",
     "typescript": "^4.6.3"
+  },
+  "dependencies": {
+    "redis-abstraction": "^0.0.2"
   }
 }
